@@ -1,6 +1,6 @@
 """Class for training a `keras` neural network from screening factor data."""
 
-from ScreeningFactorData import dataclass, ScreeningFactorData
+from ScreeningFactorData import dataclass, CompositionData, ScreeningFactorData, np, pyna
 import keras
 
 @dataclass
@@ -72,3 +72,19 @@ class ScreeningFactorNetwork:
         """Plots the layers of the model."""
 
         keras.utils.plot_model(self.model, show_shapes=True, show_layer_names=True, dpi=100)
+
+    def predict(self, temp: np.ndarray | float, dens: np.ndarray | float) -> np.ndarray:
+        """Predicts whether screening is important for given temperature(s), and density(s)."""
+
+        temp_scaled = CompositionData.exp_to_uniform(temp, self.data.temperature_range)
+        dens_scaled = CompositionData.exp_to_uniform(dens, self.data.density_range)
+        
+        mass_frac = list(self.data.comp.X.values())
+
+        if not isinstance(temp_scaled, np.ndarray):
+            x = np.array([temp_scaled, dens_scaled, *mass_frac])
+            x = np.reshape(x, (1, x.shape[0]))
+        else:
+            x = np.column_stack((temp_scaled, dens_scaled, mass_frac))
+
+        return self.model.predict(x)
