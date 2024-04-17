@@ -67,8 +67,8 @@ class CompositionData:
         return data
 
     @staticmethod
-    def uniform_to_exp(log_data: np.ndarray, data_range: tuple):
-        """Converts a uniform distribution on [0, 1) to an exponential one on range.
+    def uniform_to_exp(log_data: np.ndarray | float, data_range: tuple) -> np.ndarray | float:
+        """Converts a uniform distribution on [0, 1) to data on a log range.
         
         Keyword arguments:
         data_range -- the interval to map the exponential distribution to
@@ -78,8 +78,8 @@ class CompositionData:
         return 10**(log_range[0] + (log_range[1] - log_range[0]) * log_data)
 
     @staticmethod
-    def exp_to_uniform(exp_data: np.ndarray, data_range: tuple):
-        """Converts an exponential distribution on range to a uniform one on [0, 1), i.e. inverts uniform_to_exp.
+    def exp_to_uniform(exp_data: np.ndarray | float, data_range: tuple) -> np.ndarray | float:
+        """Converts data on a log range to data on [0, 1), i.e. inverts uniform_to_exp.
         
         Keyword arguments:
         data_range -- the interval of exponential data to map to [0, 1)
@@ -101,7 +101,7 @@ class ScreeningFactorData:
     threshold - the threshold for when screening becomes important to consider
     """
 
-    comp: list
+    comp: pyna.Composition
     reactants: list
 
     temperature_range: tuple
