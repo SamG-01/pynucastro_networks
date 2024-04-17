@@ -19,7 +19,7 @@ class ScreeningFactorNetwork:
     epochs: int = 20
 
     def __post_init__(self) -> None:
-        """Defines the model's layers, compilation arguments, and callbacks."""
+        """Defines the model's layers and compiles it."""
 
         self.input_shape = self.data.training["input"].x["scaled"].shape[1:]
 
