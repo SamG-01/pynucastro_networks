@@ -142,9 +142,7 @@ class ScreeningFactorData:
     def _screening_factor(self, temperature: float, density: float, mass_fractions: np.ndarray) -> float:
         """Computes the screening factor for a given temperature, density, and mass fraction distribution."""
 
-        #self.comp.set_array(mass_fractions)
-        for i, k in enumerate(self.comp.X):
-            self.comp.X[k] = mass_fractions[i]
+        self.comp.set_array(mass_fractions)
 
         plasma = pyna.make_plasma_state(temperature, density, self.comp.get_molar())
         return chugunov_2009(plasma, self.scn_fac)
