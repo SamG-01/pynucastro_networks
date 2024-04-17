@@ -1,6 +1,6 @@
 """Class for training a `keras` neural network from screening factor data."""
 
-from ScreeningFactorData import dataclass, CompositionData, ScreeningFactorData, np, pyna
+from ScreeningFactorData import dataclass, CompositionData, ScreeningFactorData, np
 import keras
 
 @dataclass
