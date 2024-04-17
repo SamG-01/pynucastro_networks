@@ -1,9 +1,12 @@
+"""Class for training a `keras` neural network from screening factor data."""
+
 from ScreeningFactorData import dataclass, ScreeningFactorData
 import keras
 
 @dataclass
 class ScreeningFactorNetwork:
-    """Contains a keras neural network trained to identify the importance of screening for a given temperature, density, and composition.
+    """Contains a keras neural network trained to identify the importance
+    of screening for a given temperature, density, and composition.
     
     Keyword arguments:
     data -- a `ScreeningFactorData` object containing the data to train
