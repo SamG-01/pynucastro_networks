@@ -17,6 +17,7 @@ class CompositionData:
     num_nuclei - number of nuclei in the composition
     alpha - the parameters used to generate dirichlet distributions for the mass fractions
     size - the number of (temp, dens, mass_fracs) data points to generate
+    seed - seed for random number generation
     """
 
     temperature_range: tuple
@@ -26,9 +27,13 @@ class CompositionData:
     alpha: list = None
 
     size: int = 2000
+    seed: int = None
 
     def __post_init__(self) -> None:
         """Generates and stores temperature, density, and mass fraciton data."""
+
+        # Defines rng
+        self.rng = np.random.default_rng(self.seed)
 
         # defaults to a flat Dirichlet distribution
         if self.alpha is None:
@@ -37,7 +42,7 @@ class CompositionData:
         # Generates neural network inputs
         self.temperatures = self.generate_inputs(self.temperature_range)
         self.densities = self.generate_inputs(self.density_range)
-        self.mass_fractions = np.random.dirichlet(self.alpha, self.size)
+        self.mass_fractions = self.rng.dirichlet(self.alpha, self.size)
 
         # Stores input in a dictionary
         self.x = {}
@@ -59,7 +64,7 @@ class CompositionData:
         data_range -- the range over which to generate the inputs
         """
 
-        log_data = np.random.uniform(size=self.size)
+        log_data = self.rng.uniform(size=self.size)
         data = {
             "scaled": log_data,
             "actual": self.uniform_to_exp(log_data, data_range)
@@ -99,6 +104,7 @@ class ScreeningFactorData:
     density_range - defines the bounds of the density data (min_density: float, max_density: float)
     size - the number of (temp, dens, mass_fracs) input data points to generate
     threshold - the threshold for when screening becomes important to consider
+    seed - seed for random number generation
     """
 
     comp: pyna.Composition
@@ -109,12 +115,16 @@ class ScreeningFactorData:
 
     size: int = 2000
     threshold: float = 1.01
+    seed: int = None
 
     # Class-Wide ReacLibLibrary
     reaclib_library = pyna.ReacLibLibrary()
 
     def __post_init__(self) -> None:
         """Creates a dictionary of input and output data."""
+
+        # Defines rng
+        self.rng = np.random.default_rng(self.seed)
 
         # Defines Reaction Library and Screening Factors
         rfilter = pyna.RateFilter(self.reactants)
@@ -133,7 +143,13 @@ class ScreeningFactorData:
         """
 
         if X is None:
-            X = CompositionData(self.temperature_range, self.density_range, num_nuclei=len(self.comp.get_nuclei()), size=self.size)
+            X = CompositionData(
+                self.temperature_range,
+                self.density_range,
+                num_nuclei=len(self.comp.get_nuclei()),
+                size=self.size,
+                seed=self.seed
+            )
         Y = self.screening_factor(X.x["actual"])
         Z = self.screening_indicator(Y)
 

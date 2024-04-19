@@ -21,6 +21,10 @@ class ScreeningFactorNetwork:
     def __post_init__(self) -> None:
         """Defines the model's layers and compiles it."""
 
+        # Sets rng
+        if self.data.seed is not None:
+            keras.utils.set_random_seed(self.data.seed)
+
         self.input_shape = self.data.training["input"].x["scaled"].shape[1:]
 
         self.model = keras.Sequential(
@@ -73,14 +77,12 @@ class ScreeningFactorNetwork:
 
         keras.utils.plot_model(self.model, show_shapes=True, show_layer_names=True, dpi=100)
 
-    def predict(self, temp: np.ndarray | float, dens: np.ndarray | float) -> np.ndarray:
-        """Predicts whether screening is important for given temperature(s), and density(s)."""
+    def predict(self, temp: np.ndarray | float, dens: np.ndarray | float, mass_frac: np.ndarray) -> np.ndarray:
+        """Predicts whether screening is important for given temperature(s), density(s), and mass fraction(s)."""
 
         temp_scaled = CompositionData.exp_to_uniform(temp, self.data.temperature_range)
         dens_scaled = CompositionData.exp_to_uniform(dens, self.data.density_range)
         
-        mass_frac = list(self.data.comp.X.values())
-
         if not isinstance(temp_scaled, np.ndarray):
             x = np.array([temp_scaled, dens_scaled, *mass_frac])
             x = np.reshape(x, (1, x.shape[0]))
