@@ -83,10 +83,10 @@ class ScreeningFactorNetwork:
         temp_scaled = CompositionData.exp_to_uniform(temp, self.data.temperature_range)
         dens_scaled = CompositionData.exp_to_uniform(dens, self.data.density_range)
         
-        if not isinstance(temp_scaled, np.ndarray):
+        try:
+            x = np.column_stack((temp_scaled, dens_scaled, mass_frac))
+        except ValueError:
             x = np.array([temp_scaled, dens_scaled, *mass_frac])
             x = np.reshape(x, (1, x.shape[0]))
-        else:
-            x = np.column_stack((temp_scaled, dens_scaled, mass_frac))
 
         return self.model.predict(x)
