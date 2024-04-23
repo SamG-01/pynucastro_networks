@@ -12,25 +12,24 @@ class CompositionData:
     """Stores and generates random temperature, density, and mass fraction data for a given composition.
     
     Keyword arguments:
-    temperature_range - defines the bounds of the temperature data (min_temperature: float, max_temperature: float) 
-    density_range - defines the bounds of the density data (min_density: float, max_density: float)
-    num_nuclei - number of nuclei in the composition
+    temperature_range -- defines the bounds of the temperature data (min_temperature: float, max_temperature: float) 
+    density_range -- defines the bounds of the density data (min_density: float, max_density: float)
+    num_nuclei -- a pynucastro `Composition` object
     alpha - the parameters used to generate dirichlet distributions for the mass fractions
-    size - the number of (temp, dens, mass_fracs) data points to generate
-    seed - seed for random number generation
+    size -- the number of (temp, dens, mass_fracs) data points to generate
+    seed -- seed for random number generation
     """
 
     temperature_range: tuple
     density_range: tuple
-
     num_nuclei: int
-    alpha: list = None
 
+    alpha: list = None
     size: int = 2000
     seed: int = None
 
     def __post_init__(self) -> None:
-        """Generates and stores temperature, density, and mass fraciton data."""
+        """Generates and stores temperature, density, and mass fraction data."""
 
         # Defines rng
         self.rng = np.random.default_rng(self.seed)
@@ -40,24 +39,23 @@ class CompositionData:
             self.alpha = [1] * self.num_nuclei
 
         # Generates neural network inputs
-        self.temperatures = self.generate_inputs(self.temperature_range)
-        self.densities = self.generate_inputs(self.density_range)
-        self.mass_fractions = self.rng.dirichlet(self.alpha, self.size)
+        temperatures = self.generate_inputs(self.temperature_range)
+        densities = self.generate_inputs(self.density_range)
+        mass_fractions = self.rng.dirichlet(self.alpha, self.size)
 
-        # Stores input in a dictionary
-        self.x = {}
-        self.x["scaled"] = np.column_stack((
-            self.temperatures["scaled"],
-            self.densities["scaled"],
-            self.mass_fractions
-        ))
-        self.x["actual"] = list(zip(
-            self.temperatures["actual"],
-            self.densities["actual"],
-            self.mass_fractions
+        self.x = np.column_stack((
+            temperatures["scaled"],
+            densities["scaled"],
+            mass_fractions
         ))
 
-    def convert_inputs(self, temp: float | np.ndarray, dens: float | np.ndarray, mass_frac: np.ndarray) -> np.ndarray:
+        self.x_unscaled = {
+            "temperatures": temperatures["actual"],
+            "densities": densities["actual"],
+            "mass_fractions": mass_fractions
+        }
+
+    def normalize_inputs(self, temp: float | np.ndarray, dens: float | np.ndarray, mass_frac: np.ndarray) -> np.ndarray:
         """Converts unnormalized temperature, density, and mass fraction data to a normalized array.
         
         Keyword arguments:
@@ -117,24 +115,18 @@ class ScreeningFactorData:
     """Stores and generates random screening factors from temperature, density, and mass fraction data for a given composition.
     
     Keyword arguments
-    comp -- a pynucastro `Composition` object
+    inputs -- a `CompositionData` object with input data
+    comp -- a `pynucastro.Composition` object containing the nuclei in the system
     reactants -- a list of reactants (strings)
-    temperature_range - defines the bounds of the temperature data (min_temperature: float, max_temperature: float) 
-    density_range - defines the bounds of the density data (min_density: float, max_density: float)
-    size - the number of (temp, dens, mass_fracs) input data points to generate
     threshold - the threshold for when screening becomes important to consider
-    seed - seed for random number generation
     """
+
+    inputs: CompositionData
 
     comp: pyna.Composition
     reactants: list
 
-    temperature_range: tuple
-    density_range: tuple
-
-    size: int = 2000
     threshold: float = 1.01
-    seed: int = None
 
     # Class-Wide ReacLibLibrary
     reaclib_library = pyna.ReacLibLibrary()
@@ -142,37 +134,15 @@ class ScreeningFactorData:
     def __post_init__(self) -> None:
         """Creates a dictionary of input and output data."""
 
-        # Defines rng
-        self.rng = np.random.default_rng(self.seed)
-
         # Defines Reaction Library and Screening Factors
         rfilter = pyna.RateFilter(self.reactants)
         r = self.reaclib_library.filter(rfilter).get_rates()[0]
 
         self.scn_fac = pyna.make_screen_factors(r.ion_screen[0], r.ion_screen[1])
 
-        self.training = self.generate_data()
-        self.testing = self.generate_data()
-
-    def generate_data(self, X: CompositionData=None) -> dict:
-        """Generates input and rate data.
-        
-        Keyword arguments:
-        X -- a preexisting `CompositionData` object. If excluded, the method will generate its own random one.
-        """
-
-        if X is None:
-            X = CompositionData(
-                self.temperature_range,
-                self.density_range,
-                num_nuclei=len(self.comp.get_nuclei()),
-                size=self.size,
-                seed=self.seed
-            )
-        Y = self.screening_factor(X.x["actual"])
-        Z = self.screening_indicator(Y)
-
-        return {"input": X, "factors": Y, "indicator": Z}
+        # Generates training and testing output data
+        self.factors = self.screening_factors()
+        self.indicators = self.screening_indicator(self.factors, self.threshold)
 
     def _screening_factor(self, temperature: float, density: float, mass_fractions: np.ndarray) -> float:
         """Computes the screening factor for a given temperature, density, and mass fraction distribution."""
@@ -184,12 +154,17 @@ class ScreeningFactorData:
         plasma = pyna.make_plasma_state(temperature, density, self.comp.get_molar())
         return chugunov_2009(plasma, self.scn_fac)
 
-    def screening_factor(self, x_unscaled: list) -> np.ndarray:
+    def screening_factors(self) -> np.ndarray:
         """Vectorization of self._screening_factor."""
 
-        return np.array([self._screening_factor(*p) for p in x_unscaled])
+        return np.array([
+            self._screening_factor(temperature, density, mass_fractions)
+            for temperature, density, mass_fractions
+            in zip(*self.inputs.x_unscaled.values())
+        ])
 
-    def screening_indicator(self, rates: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def screening_indicator(rates: np.ndarray, threshold: float) -> np.ndarray:
         """Indicator function for whether a screening factor is important."""
 
-        return to_categorical((rates > self.threshold).astype(int))
+        return to_categorical((rates > threshold).astype(int))

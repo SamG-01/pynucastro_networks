@@ -9,23 +9,23 @@ class ScreeningFactorNetwork:
     of screening for a given temperature, density, and composition.
     
     Keyword arguments:
-    data -- a `ScreeningFactorData` object containing the data to train
-    batch_size -- the batch size.
-    epochs -- the number of epochs to train with.
+    training_data -- a `ScreeningFactorData` object containing the data to train on
+    testing_data -- a `ScreeningFactorData` object containing the data to test the network on
     """
 
-    data: ScreeningFactorData
-    batch_size: int = 200
-    epochs: int = 20
+    training_data: ScreeningFactorData
+    testing_data: ScreeningFactorData
+
+    seed: int = None
 
     def __post_init__(self) -> None:
         """Defines the model's layers and compiles it."""
 
         # Sets rng
-        if self.data.seed is not None:
-            keras.utils.set_random_seed(self.data.seed)
+        if self.seed is not None:
+            keras.utils.set_random_seed(self.seed)
 
-        self.input_shape = self.data.training["input"].x["scaled"].shape[1:]
+        self.input_shape = self.training_data.inputs.x.shape[1:]
 
         self.model = keras.Sequential(
             [
@@ -56,18 +56,18 @@ class ScreeningFactorNetwork:
         """
 
         self.model.fit(
-            self.data.training["input"].x["scaled"],
-            self.data.training["indicator"],
-            batch_size=self.batch_size,
-            epochs=self.epochs,
+            x=self.training_data.inputs.x,
+            y=self.training_data.indicators,
+            batch_size=200,
+            epochs=20,
             validation_split=0.15,
             callbacks=self.callbacks,
             verbose=verbose
         )
 
         self.score = self.model.evaluate(
-            self.data.testing["input"].x["scaled"],
-            self.data.testing["indicator"],
+            x=self.testing_data.inputs.x,
+            y=self.testing_data.indicators,
             verbose=0
         )
         self.loss_value, self.accuracy = self.score
@@ -80,5 +80,5 @@ class ScreeningFactorNetwork:
     def predict(self, temp: np.ndarray | float, dens: np.ndarray | float, mass_frac: np.ndarray) -> np.ndarray:
         """Predicts whether screening is important for given temperature(s), density(s), and mass fraction(s)."""
 
-        x = self.data.training["input"].convert_inputs(temp, dens, mass_frac)
+        x = self.training_data.inputs.normalize_inputs(temp, dens, mass_frac)
         return self.model.predict(x)
