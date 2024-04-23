@@ -57,6 +57,25 @@ class CompositionData:
             self.mass_fractions
         ))
 
+    def convert_inputs(self, temp: float | np.ndarray, dens: float | np.ndarray, mass_frac: np.ndarray) -> np.ndarray:
+        """Converts unnormalized temperature, density, and mass fraction data to a normalized array.
+        
+        Keyword arguments:
+        temp -- a single temperature or a sequence of temperatures.
+        dens -- a single density or a sequence of densities.
+        mass_frac -- a single mass fraction distribution or a two-dimensional array of mass fraction distributions.
+        """
+
+        temp_scaled = self.exp_to_uniform(temp, self.temperature_range)
+        dens_scaled = self.exp_to_uniform(dens, self.density_range)
+
+        try:
+            x = np.column_stack((temp_scaled, dens_scaled, mass_frac))
+        except ValueError:
+            x = np.array([temp_scaled, dens_scaled, *mass_frac])
+            x = np.reshape(x, (1, x.shape[0]))
+        return x
+
     def generate_inputs(self, data_range: tuple) -> np.ndarray:
         """Generates random temperature or density data.
         

@@ -1,6 +1,6 @@
 """Class for training a `keras` neural network from screening factor data."""
 
-from ScreeningFactorData import dataclass, CompositionData, ScreeningFactorData, np
+from ScreeningFactorData import dataclass, ScreeningFactorData, np
 import keras
 
 @dataclass
@@ -80,13 +80,5 @@ class ScreeningFactorNetwork:
     def predict(self, temp: np.ndarray | float, dens: np.ndarray | float, mass_frac: np.ndarray) -> np.ndarray:
         """Predicts whether screening is important for given temperature(s), density(s), and mass fraction(s)."""
 
-        temp_scaled = CompositionData.exp_to_uniform(temp, self.data.temperature_range)
-        dens_scaled = CompositionData.exp_to_uniform(dens, self.data.density_range)
-        
-        try:
-            x = np.column_stack((temp_scaled, dens_scaled, mass_frac))
-        except ValueError:
-            x = np.array([temp_scaled, dens_scaled, *mass_frac])
-            x = np.reshape(x, (1, x.shape[0]))
-
+        x = self.data.training["input"].convert_inputs(temp, dens, mass_frac)
         return self.model.predict(x)
