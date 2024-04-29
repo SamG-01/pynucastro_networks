@@ -192,7 +192,12 @@ class ScreeningFactorData:
         ])
 
     @staticmethod
-    def screening_indicator(rates: np.ndarray, threshold: float) -> np.ndarray:
-        """Indicator function for whether a screening factor is important."""
+    def screening_indicator(factors: np.ndarray, threshold: float) -> np.ndarray:
+        """Indicator function for whether a screening factor is important.
+        
+        Keyword arguments:
+        factors -- the screening factors to check.
+        threshold -- the threshold over which the screening factors are relevant.
+        """
 
-        return to_categorical((rates > threshold).astype(int))
+        return to_categorical((factors > threshold).astype(int))
