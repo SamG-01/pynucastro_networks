@@ -14,15 +14,15 @@ class CompositionData:
     Keyword arguments:
     temperature_range -- defines the bounds of the temperature data (min_temperature: float, max_temperature: float) 
     density_range -- defines the bounds of the density data (min_density: float, max_density: float)
-    num_nuclei -- a pynucastro `Composition` object
-    alpha - the parameters used to generate dirichlet distributions for the mass fractions
+    num_nuclei -- the number of nuclei in the composition. If a list is supplied, it will be used as the mass fractions.
+    alpha - the parameters used to generate dirichlet distributions for the mass fractions (defaults to flat ones).
     size -- the number of (temp, dens, mass_fracs) data points to generate
-    seed -- seed for random number generation
+    seed -- seed for random generation.
     """
 
     temperature_range: tuple
     density_range: tuple
-    num_nuclei: int
+    num_nuclei: int | list
 
     alpha: list = None
     size: int = 2000
@@ -34,14 +34,18 @@ class CompositionData:
         # Defines rng
         self.rng = np.random.default_rng(self.seed)
 
-        # defaults to a flat Dirichlet distribution
-        if self.alpha is None:
-            self.alpha = [1] * self.num_nuclei
-
         # Generates neural network inputs
         temperatures = self.generate_inputs(self.temperature_range)
         densities = self.generate_inputs(self.density_range)
-        mass_fractions = self.rng.dirichlet(self.alpha, self.size)
+        
+        if isinstance(self.num_nuclei, list):
+            mass_fractions = np.array(self.num_nuclei)/np.sum(self.num_nuclei)
+            self.num_nuclei = len(mass_fractions)
+            mass_fractions = np.tile(mass_fractions, self.size).reshape(self.size, self.num_nuclei)
+        else:
+            if self.alpha is None:
+                self.alpha = [1] * self.num_nuclei
+            mass_fractions = self.rng.dirichlet(self.alpha, self.size)
 
         self.x = np.column_stack((
             temperatures["scaled"],
