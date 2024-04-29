@@ -7,125 +7,143 @@ import numpy as np
 import pynucastro as pyna
 from pynucastro.screening import chugunov_2009
 
+default_rng = np.random.default_rng()
+
 @dataclass
-class CompositionData:
-    """Stores and generates random temperature, density, and mass fraction data for a given composition.
+class ExpLogData:
+    """Stores and generates random temperature or density data in both log and linear form.
     
-    Keyword arguments:
-    temperature_range -- defines the bounds of the temperature data (min_temperature: float, max_temperature: float) 
-    density_range -- defines the bounds of the density data (min_density: float, max_density: float)
-    num_nuclei -- the number of nuclei in the composition. If a list is supplied, it will be used as the mass fractions.
-    alpha - the parameters used to generate dirichlet distributions for the mass fractions (defaults to flat ones).
-    size -- the number of (temp, dens, mass_fracs) data points to generate
-    seed -- seed for random generation.
+    data_range -- defines the bounds of the data (min: float, max: float)
     """
 
-    temperature_range: tuple
-    density_range: tuple
-    num_nuclei: int | list
-
-    alpha: list = None
-    size: int = 2000
-    seed: int = None
+    data_range: tuple
+    scaled: np.ndarray = None
+    unscaled: np.ndarray = None
+    size: int = None
+    rng: np.random.Generator = None
 
     def __post_init__(self) -> None:
-        """Generates and stores temperature, density, and mass fraction data."""
+        self.log_range = np.log10(self.data_range)
 
-        # Defines rng
-        self.rng = np.random.default_rng(self.seed)
-
-        # Generates neural network inputs
-        temperatures = self.generate_inputs(self.temperature_range)
-        densities = self.generate_inputs(self.density_range)
-        
-        if isinstance(self.num_nuclei, list):
-            mass_fractions = np.array(self.num_nuclei)/np.sum(self.num_nuclei)
-            self.num_nuclei = len(mass_fractions)
-            mass_fractions = np.tile(mass_fractions, self.size).reshape(self.size, self.num_nuclei)
-        else:
-            if self.alpha is None:
-                self.alpha = [1] * self.num_nuclei
-            mass_fractions = self.rng.dirichlet(self.alpha, self.size)
-
-        self.x = np.column_stack((
-            temperatures["scaled"],
-            densities["scaled"],
-            mass_fractions
-        ))
-
-        self.x_unscaled = {
-            "temperatures": temperatures["actual"],
-            "densities": densities["actual"],
-            "mass_fractions": mass_fractions
-        }
-
-    def normalize_inputs(self, temp: float | np.ndarray, dens: float | np.ndarray, mass_frac: np.ndarray) -> np.ndarray:
-        """Converts unnormalized temperature, density, and mass fraction data to a normalized array.
+    @classmethod
+    def from_uniform(cls, data_range: tuple, scaled: np.ndarray = None, size: int = 200, rng: np.random.Generator = default_rng):
+        """Constructs ExpLogData from an array of scaled data.
         
         Keyword arguments:
-        temp -- a single temperature or a sequence of temperatures.
-        dens -- a single density or a sequence of densities.
-        mass_frac -- a single mass fraction distribution or a two-dimensional array of mass fraction distributions.
+        data_range -- defines the bounds of the data (min: float, max: float)
+        scaled -- the scaled data to construct the class with. If None, will randomly generate it.
+        size -- the number of data points to generate the data if scaled is None
+        rng -- the Generator object to use to generate the data if scaled is None
         """
 
-        temp_scaled = self.exp_to_uniform(temp, self.temperature_range)
-        dens_scaled = self.exp_to_uniform(dens, self.density_range)
+        self = cls(data_range)
 
-        try:
-            x = np.column_stack((temp_scaled, dens_scaled, mass_frac))
-        except ValueError:
-            x = np.array([temp_scaled, dens_scaled, *mass_frac])
-            x = np.reshape(x, (1, x.shape[0]))
-        return x
+        if scaled is None:
+            scaled = rng.uniform(size=size)
+            self.rng = rng
 
-    def generate_inputs(self, data_range: tuple) -> np.ndarray:
-        """Generates random temperature or density data.
+        self.scaled = scaled
+        self.unscaled = self.uniform_to_exp(self.scaled)
+        self.size = size
+
+        return self
+
+    @classmethod
+    def from_exp(cls, data_range: tuple, unscaled: np.ndarray):
+        """Constructs ExpLogData from an array of unscaled data.
         
-        Keyword arguments:
-        data_range -- the range over which to generate the inputs
+        data_range -- defines the bounds of the data (min: float, max: float)
+        unscaled -- the unscaled data to construct the class with
         """
 
-        log_data = self.rng.uniform(size=self.size)
-        data = {
-            "scaled": log_data,
-            "actual": self.uniform_to_exp(log_data, data_range)
-        }
-        return data
+        self = cls(data_range)
+        self.unscaled = unscaled
+        self.scaled = self.exp_to_uniform(self.unscaled)
+        self.size = len(unscaled)
 
-    @staticmethod
-    def uniform_to_exp(log_data: np.ndarray | float, data_range: tuple) -> np.ndarray | float:
+        return self
+
+    def uniform_to_exp(self, log_data: np.ndarray | float) -> np.ndarray | float:
         """Converts a uniform distribution on [0, 1) to data on a log range.
         
         Keyword arguments:
-        data_range -- the interval to map the exponential distribution to
+        log_data -- the data on [0, 1)
         """
 
-        log_range = np.log10(data_range)
-        return 10**(log_range[0] + (log_range[1] - log_range[0]) * log_data)
+        return 10**(self.log_range[0] + (self.log_range[1] - self.log_range[0]) * log_data)
 
-    @staticmethod
-    def exp_to_uniform(exp_data: np.ndarray | float, data_range: tuple) -> np.ndarray | float:
+    def exp_to_uniform(self, exp_data: np.ndarray | float) -> np.ndarray | float:
         """Converts data on a log range to data on [0, 1), i.e. inverts uniform_to_exp.
         
         Keyword arguments:
-        data_range -- the interval of exponential data to map to [0, 1)
+        data_range -- the exponential data to map to [0, 1)
         """
 
-        log_range = np.log10(data_range)
-        return (np.log10(exp_data) - log_range[0])/(log_range[1] - log_range[0])
+        return (np.log10(exp_data) - self.log_range[0])/(self.log_range[1] - self.log_range[0])
+
+@dataclass
+class MassFractionData:
+    """Stores and generates random mass fraction data.
+    
+    data -- the array of mass fraction data.
+    """
+
+    data: np.ndarray = None
+    num_nuclei: int = None
+    size: int = None
+    rng: np.random.Generator = None
+
+    @classmethod
+    def from_dirichlet(cls, num_nuclei: int, alpha: list = None, size: int = 2000, rng: np.random.Generator = default_rng):
+        """Constructs MassFractionData from a dirichlet distribution.
+        
+        Keyword arguments:
+        num_nuclei -- the number of nuclei in the composition.
+        alpha -- the parameters used to generate dirichlet distributions. Defaults to a flat distribution.
+        size -- the number of mass fraction lists to generate.
+        rng 
+        """
+
+        if alpha is None:
+            alpha = [1] * num_nuclei
+
+        data = rng.dirichlet(alpha, size)
+        self = cls(data, num_nuclei, size, rng)
+
+        return self
+
+    @classmethod
+    def from_static(cls, mass_fractions: np.ndarray | list, size: int):
+        """Constructs MassFractionData from a set mass fraction array.
+        
+        Keyword arguments:
+        mass_fractions -- the array of mass fractions to use for every row.
+        size -- the number of rows to generate.
+        """
+
+        num_nuclei = len(mass_fractions)
+        data = np.tile(mass_fractions, size).reshape(size, num_nuclei)
+        self = cls(data, num_nuclei, size)
+
+        return self
 
 @dataclass
 class ScreeningFactorData:
     """Stores and generates random screening factors from temperature, density, and mass fraction data for a given composition.
     
     Keyword arguments
-    inputs -- a `CompositionData` object with input data
+    temperatures -- an `ExpLogData` object containing the temperature data.
+    densities -- an `ExpLogData` object containing the density data.
+    mass_fractions -- a `MassFractionData` object containing the mass fraction data.
+
     comp -- a `pynucastro.Composition` object containing the nuclei in the system
     reactants -- a list of reactants (strings)
     threshold - the threshold for when screening becomes important to consider
     """
 
-    inputs: CompositionData
+    temperatures: ExpLogData
+    densities: ExpLogData
+    mass_fractions: MassFractionData
 
     comp: pyna.Composition
     reactants: list
@@ -136,7 +154,13 @@ class ScreeningFactorData:
     reaclib_library = pyna.ReacLibLibrary()
 
     def __post_init__(self) -> None:
-        """Creates a dictionary of input and output data."""
+        """Creates a input and output data."""
+
+        self.inputs = np.column_stack((
+                self.temperatures.scaled,
+                self.densities.scaled,
+                self.mass_fractions.data
+        ))
 
         # Defines Reaction Library and Screening Factors
         rfilter = pyna.RateFilter(self.reactants)
@@ -162,9 +186,9 @@ class ScreeningFactorData:
         """Vectorization of self._screening_factor."""
 
         return np.array([
-            self._screening_factor(temperature, density, mass_fractions)
-            for temperature, density, mass_fractions
-            in zip(*self.inputs.x_unscaled.values())
+            self._screening_factor(temp, dens, fracs)
+            for temp, dens, fracs
+            in zip(self.temperatures.unscaled, self.densities.unscaled, self.mass_fractions.data)
         ])
 
     @staticmethod

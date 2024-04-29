@@ -9,12 +9,12 @@ class ScreeningFactorNetwork:
     of screening for a given temperature, density, and composition.
     
     Keyword arguments:
-    training_data -- a `ScreeningFactorData` object containing the data to train on
-    testing_data -- a `ScreeningFactorData` object containing the data to test the network on
+    training -- a `ScreeningFactorData` object containing the data to train on
+    testing -- a `ScreeningFactorData` object containing the data to test the network on
     """
 
-    training_data: ScreeningFactorData
-    testing_data: ScreeningFactorData
+    training: ScreeningFactorData
+    testing: ScreeningFactorData
 
     seed: int = None
 
@@ -25,7 +25,7 @@ class ScreeningFactorNetwork:
         if self.seed is not None:
             keras.utils.set_random_seed(self.seed)
 
-        self.input_shape = self.training_data.inputs.x.shape[1:]
+        self.input_shape = self.training.inputs.shape[1:]
 
         self.model = keras.Sequential(
             [
@@ -56,8 +56,8 @@ class ScreeningFactorNetwork:
         """
 
         self.model.fit(
-            x=self.training_data.inputs.x,
-            y=self.training_data.indicators,
+            x=self.training.inputs,
+            y=self.training.indicators,
             batch_size=200,
             epochs=20,
             validation_split=0.15,
@@ -66,8 +66,8 @@ class ScreeningFactorNetwork:
         )
 
         self.score = self.model.evaluate(
-            x=self.testing_data.inputs.x,
-            y=self.testing_data.indicators,
+            x=self.testing.inputs,
+            y=self.testing.indicators,
             verbose=0
         )
         self.loss_value, self.accuracy = self.score
@@ -77,8 +77,11 @@ class ScreeningFactorNetwork:
 
         keras.utils.plot_model(self.model, show_shapes=True, show_layer_names=True, dpi=100)
 
-    def predict(self, temp: np.ndarray | float, dens: np.ndarray | float, mass_frac: np.ndarray) -> np.ndarray:
-        """Predicts whether screening is important for given temperature(s), density(s), and mass fraction(s)."""
+    def predict(self, x: ScreeningFactorData) -> np.ndarray:
+        """Predicts whether screening is important for a given `ScreeningFactorData` object.
 
-        x = self.training_data.inputs.normalize_inputs(temp, dens, mass_frac)
-        return self.model.predict(x)
+        Keyword arguments:
+        x -- the input data fed to the network.
+        """
+    
+        return self.model.predict(x.inputs)
