@@ -2,7 +2,9 @@
 
 from dataclasses import dataclass
 from keras.utils import to_categorical
+
 import numpy as np
+import matplotlib.pyplot as plt
 
 import pynucastro as pyna
 from pynucastro.screening import chugunov_2009
@@ -36,7 +38,7 @@ class ExpLogData:
         rng -- the Generator object to use to generate the data if scaled is None
         """
 
-        self = cls(data_range)
+        self = cls(data_range, size=size)
 
         if scaled is None:
             scaled = rng.uniform(size=size)
@@ -44,7 +46,6 @@ class ExpLogData:
 
         self.scaled = scaled
         self.unscaled = self.uniform_to_exp(self.scaled)
-        self.size = size
 
         return self
 
@@ -56,10 +57,8 @@ class ExpLogData:
         unscaled -- the unscaled data to construct the class with
         """
 
-        self = cls(data_range)
-        self.unscaled = unscaled
+        self = cls(data_range, unscaled=unscaled, size=len(unscaled))
         self.scaled = self.exp_to_uniform(self.unscaled)
-        self.size = len(unscaled)
 
         return self
 
@@ -92,6 +91,7 @@ class MassFractionData:
     num_nuclei: int = None
     size: int = None
     rng: np.random.Generator = None
+    static: bool = False
 
     @classmethod
     def from_dirichlet(cls, num_nuclei: int, alpha: list = None, size: int = 2000, rng: np.random.Generator = default_rng):
@@ -123,7 +123,7 @@ class MassFractionData:
 
         num_nuclei = len(mass_fractions)
         data = np.tile(mass_fractions, size).reshape(size, num_nuclei)
-        self = cls(data, num_nuclei, size)
+        self = cls(data, num_nuclei, size, static=True)
 
         return self
 
@@ -169,8 +169,9 @@ class ScreeningFactorData:
         self.scn_fac = pyna.make_screen_factors(r.ion_screen[0], r.ion_screen[1])
 
         # Generates training and testing output data
-        self.factors = self.screening_factors()
+        self.factors = self.screening_factors(self.temperatures.unscaled, self.densities.unscaled, self.mass_fractions.data)
         self.indicators = self.screening_indicator(self.factors, self.threshold)
+
 
     def _screening_factor(self, temperature: float, density: float, mass_fractions: np.ndarray) -> float:
         """Computes the screening factor for a given temperature, density, and mass fraction distribution."""
@@ -182,13 +183,13 @@ class ScreeningFactorData:
         plasma = pyna.make_plasma_state(temperature, density, self.comp.get_molar())
         return chugunov_2009(plasma, self.scn_fac)
 
-    def screening_factors(self) -> np.ndarray:
+    def screening_factors(self, temperatures: np.ndarray, densities: np.ndarray, mass_fractions: np.ndarray) -> np.ndarray:
         """Vectorization of self._screening_factor."""
 
         return np.array([
             self._screening_factor(temp, dens, fracs)
             for temp, dens, fracs
-            in zip(self.temperatures.unscaled, self.densities.unscaled, self.mass_fractions.data)
+            in zip(temperatures, densities, mass_fractions)
         ])
 
     @staticmethod
@@ -201,3 +202,27 @@ class ScreeningFactorData:
         """
 
         return to_categorical((factors > threshold).astype(int))
+
+    def plot_factors(self) -> None:
+        """Creates a 2D plot of the screening factor with respect to temperature and density for a fixed mass fraction."""
+
+        if not self.mass_fractions.static:
+            raise NotImplementedError
+
+        size, num_nuclei = self.mass_fractions.size, self.mass_fractions.num_nuclei
+        F = np.tile(self.mass_fractions.data, size).reshape(size**2, num_nuclei)
+        X, Y = np.meshgrid(self.temperatures.unscaled, self.densities.unscaled)
+        Z = self.screening_factors(X.flatten(), Y.flatten(), F).reshape(size, size)
+
+        cb = plt.pcolormesh(X, Y, Z)
+        cb.set_clim(vmin=0, vmax=30)
+        cbar = plt.colorbar(cb)
+
+        plt.xscale("log")
+        plt.yscale("log")
+
+        plt.xlabel("Temperature")
+        plt.ylabel("Density")
+        plt.title("Screening Factors")
+
+        plt.show()
