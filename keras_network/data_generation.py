@@ -36,13 +36,11 @@ class ScreeningFactorData:
     
     Keyword arguments:
         `screen_func`: the screening function to use.
-        `threshold`: the threshold after which a screening factor is considered important.
         `size`: the number of data points to have in the training and testing data.
         `rng`: the seed used for random number generation.
     """
 
     screen_func: ScreeningFunction
-    threshold: float = 1.01
     size: int = 10**6
     seed: int | None = None
 
@@ -73,15 +71,10 @@ class ScreeningFactorData:
 
         # computes the screening factors and whether they're important
         self.f = screening_factors(self.screen_func, self.x).reshape(3*self.size, 1)
-        self.y = self.screening_indicator(factors=self.f, threshold=self.threshold)
-
-        # stores fraction of 1s in self.y
-        self.frac_pos = np.count_nonzero(self.y)/(3 * self.size)
 
         # splits the data into training, validation, and testing data
         self.x = self.split_data(self.x)
-        self.f = self.split_data(self.f)
-        self.y = self.split_data(self.y)
+        self.f = self.split_data(np.log10(self.f))
 
     @staticmethod
     def split_data(data: np.ndarray) -> dict[str, np.ndarray]:
@@ -90,14 +83,3 @@ class ScreeningFactorData:
 
         train, validate, test = np.split(data, 3)
         return {"train": train, "validate": validate, "test": test}
-
-    @staticmethod
-    def screening_indicator(factors: ArrayLike, threshold: float) -> ArrayLike:
-        """Indicator function for whether a screening factor is important.
-        
-        Keyword arguments:
-            factors: the screening factors to check.
-            threshold: the threshold over which the screening factors are relevant.
-        """
-
-        return (factors > threshold).astype(int)

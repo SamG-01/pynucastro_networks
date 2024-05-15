@@ -14,8 +14,8 @@ def _predict(
         temp: float, dens: float,
         comp: pyna.Composition,
         nuclei: tuple[pyna.Nucleus, pyna.Nucleus]
-    ) -> bool:
-    """Returns a model's prediction for how important screening is for a given temperature, density, and Composition.
+    ) -> float:
+    """Returns a model's prediction for the screening factor given a temperature, density, and Composition.
 
     Keyword arguments:
         `network`: the `ScreeningFactorNetwork` to perform the prediction for.
@@ -36,7 +36,7 @@ def _predict(
         scn_fac.z2, scn_fac.z2
     ]).reshape(1, 9)
 
-    return bool(1 * network.model.predict(x, verbose=0).item())
+    return network.model.predict(x, verbose=0).item()
 
 class ScreeningFactorNetwork:
     """Contains a `keras` neural network trained to identify the importance
@@ -59,46 +59,18 @@ class ScreeningFactorNetwork:
         if seed is not None:
             keras.utils.set_random_seed(seed)
 
-        # Computes output and class bias
-        pos = self.data.frac_pos
-        neg = 1 - pos
-
-        self.class_weight = {0: 0.5/neg, 1: 0.5/pos}
-        self.initial_bias = np.log(pos/neg)
-        self.initial_bias = keras.initializers.Constant(self.initial_bias)
-
-        # Defines threshold for defining false positives/negatives
-        self.confidence = 0.5
-
         # Sets up model framework
         self.score = []
 
         self.model = keras.Sequential(
             [
                 keras.layers.BatchNormalization(axis=-1, scale=False, center=False),
-                keras.layers.Dense(units=100, activation="relu"),
-                keras.layers.Dropout(rate=0.5),
-                keras.layers.Dense(units=1, activation="sigmoid", bias_initializer=self.initial_bias)
             ]
         )
 
-        self.metrics = [
-            keras.metrics.BinaryCrossentropy(name='cross entropy'),
-            keras.metrics.MeanSquaredError(name='Brier score'),
-            keras.metrics.TruePositives(name='tp', thresholds=self.confidence),
-            keras.metrics.FalsePositives(name='fp', thresholds=self.confidence),
-            keras.metrics.TrueNegatives(name='tn', thresholds=self.confidence),
-            keras.metrics.FalseNegatives(name='fn', thresholds=self.confidence),
-            keras.metrics.BinaryAccuracy(name='accuracy', threshold=self.confidence),
-            keras.metrics.Precision(name='precision', thresholds=self.confidence),
-            keras.metrics.Recall(name='recall', thresholds=self.confidence),
-            keras.metrics.AUC(name='auc'),
-            keras.metrics.AUC(name='prc', curve='PR')
-        ]
+        self.metrics = []
 
-        self.loss = [
-            keras.losses.BinaryCrossentropy()
-        ]
+        self.loss = []
 
         self.callbacks = [
             keras.callbacks.EarlyStopping(
@@ -150,7 +122,8 @@ class ScreeningFactorNetwork:
             comp: pyna.Composition,
             nuclei: tuple[pyna.Nucleus, pyna.Nucleus]
         ) -> bool:
-        """Returns a model's prediction for how important screening is for a given temperature, density, and Composition.
+        """Returns a model's prediction for the screening factor
+        of a pair of nuclei given a temperature, density, and Composition.
 
         Keyword arguments:
             `temp`, `dens`: the temperature and density.
