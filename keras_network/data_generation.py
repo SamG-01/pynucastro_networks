@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from pynucastro.screening import ScreenFactors
-from .utils import DummyPlasmaState, ArrayLike, ScreeningFunction, z_to_a
+from .utils import DummyPlasmaState, ScreeningFunction, z_to_a
 
 __all__ = ["ScreeningFactorData"]
 
@@ -70,11 +70,14 @@ class ScreeningFactorData:
         self.x = np.column_stack(tuple(self._x.values()))
 
         # computes the screening factors and whether they're important
-        self.f = screening_factors(self.screen_func, self.x).reshape(3*self.size, 1)
+        self._f = screening_factors(self.screen_func, self.x).reshape(3*self.size, 1)
+        self._f = np.log10(self._f)
+        self.f_max = np.nanmax(self._f)
+        self.f = self._f / self.f_max
 
         # splits the data into training, validation, and testing data
         self.x = self.split_data(self.x)
-        self.f = self.split_data(np.log10(self.f))
+        self.f = self.split_data(self.f)
 
     @staticmethod
     def split_data(data: np.ndarray) -> dict[str, np.ndarray]:

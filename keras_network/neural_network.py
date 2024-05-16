@@ -36,7 +36,10 @@ def _predict(
         scn_fac.z2, scn_fac.z2
     ]).reshape(1, 9)
 
-    return network.model.predict(x, verbose=0).item()
+    p = network.model.predict(x, verbose=0).item()
+    p *= network.data.f_max
+
+    return 10**p
 
 class ScreeningFactorNetwork:
     """Contains a `keras` neural network trained to identify the importance
@@ -65,16 +68,25 @@ class ScreeningFactorNetwork:
         self.model = keras.Sequential(
             [
                 keras.layers.BatchNormalization(axis=-1, scale=False, center=False),
+                keras.layers.Dense(1000, activation="relu"),
+                keras.layers.Dropout(0.25),
+                keras.layers.Dense(1)
             ]
         )
 
-        self.metrics = []
+        self.metrics = [
+            keras.metrics.Accuracy(name="accuracy"),
+            keras.metrics.MeanSquaredError(name="mean_squared_error"),
+            keras.metrics.MeanAbsoluteError(name="mean_absolute_error"),
+            keras.metrics.MeanAbsolutePercentageError(name="mean_absolute_percentage_error"),
+            keras.metrics.MeanSquaredLogarithmicError(name="mean_squared_logarithmic_error"),
+        ]
 
-        self.loss = []
+        self.loss = keras.losses.MeanAbsoluteError(reduction="sum_over_batch_size", name="root_mean_squared_error")
 
         self.callbacks = [
             keras.callbacks.EarlyStopping(
-                monitor='val_prc',
+                monitor='accuracy',
                 verbose=1,
                 patience=10,
                 mode='max',
@@ -88,7 +100,7 @@ class ScreeningFactorNetwork:
         self.model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=1e-3),
             loss=self.loss,
-            metrics=self.metrics
+            #metrics=self.metrics
         )
 
     def fit_model(self, verbose=0) -> keras.callbacks.History:
@@ -98,7 +110,7 @@ class ScreeningFactorNetwork:
             `verbose`: how verbose `self.model.fit` should be
         """
 
-        x, y = self.data.x, self.data.y
+        x, y = self.data.x, self.data.f
 
         self.model.fit(
             x=x["train"],
@@ -107,8 +119,7 @@ class ScreeningFactorNetwork:
             epochs=100,
             verbose=verbose,
             callbacks=self.callbacks,
-            validation_data=(x["validate"], y["validate"]),
-            class_weight=self.class_weight
+            validation_data=(x["validate"], y["validate"])
         )
 
         self.score = self.model.evaluate(
@@ -130,4 +141,5 @@ class ScreeningFactorNetwork:
             `comp`: the `Composition` to consider.
             `nuclei`: the pair of nuclei to predict screening for.
         """
+
         return _predict(self, temp, dens, comp, nuclei)
