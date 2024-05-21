@@ -42,7 +42,7 @@ class ScreeningFactorNetwork:
     """Contains a `keras` neural network trained to identify the importance
     of screening for a given temperature, density, and composition.
 
-    https://www.tensorflow.org/tutorials/structured_data/imbalanced_data
+    https://keras.io/examples/structured_data/imbalanced_classification/
     """
 
     def __init__(self, data: ScreeningFactorData, seed: int = None) -> None:
@@ -64,8 +64,8 @@ class ScreeningFactorNetwork:
         neg = 1 - pos
 
         self.class_weight = {0: 0.5/neg, 1: 0.5/pos}
-        self.initial_bias = np.log(pos/neg)
-        self.initial_bias = keras.initializers.Constant(self.initial_bias)
+        #self.initial_bias = np.log(pos/neg)
+        #self.initial_bias = keras.initializers.Constant(self.initial_bias)
 
         # Defines threshold for defining false positives/negatives
         self.confidence = 0.5
@@ -73,27 +73,30 @@ class ScreeningFactorNetwork:
         # Sets up model framework
         self.score = []
 
+        # Normalization layer
+        self.normalization = keras.layers.Normalization(axis=-1)
+        self.normalization.adapt(self.data.x["train"])
+
+        # Model layers
         self.model = keras.Sequential(
             [
-                keras.layers.BatchNormalization(axis=-1, scale=False, center=False),
-                keras.layers.Dense(units=100, activation="relu"),
-                keras.layers.Dropout(rate=0.5),
-                keras.layers.Dense(units=1, activation="sigmoid", bias_initializer=self.initial_bias)
+                self.normalization,
+                keras.layers.Dense(512, activation="relu"),
+                keras.layers.Dense(512, activation="relu"),
+                keras.layers.Dropout(0.3),
+                keras.layers.Dense(512, activation="relu"),
+                keras.layers.Dropout(0.3),
+                keras.layers.Dense(1, activation="sigmoid"),
             ]
         )
 
         self.metrics = [
-            keras.metrics.BinaryCrossentropy(name='cross entropy'),
-            keras.metrics.MeanSquaredError(name='Brier score'),
-            keras.metrics.TruePositives(name='tp', thresholds=self.confidence),
-            keras.metrics.FalsePositives(name='fp', thresholds=self.confidence),
-            keras.metrics.TrueNegatives(name='tn', thresholds=self.confidence),
-            keras.metrics.FalseNegatives(name='fn', thresholds=self.confidence),
-            keras.metrics.BinaryAccuracy(name='accuracy', threshold=self.confidence),
-            keras.metrics.Precision(name='precision', thresholds=self.confidence),
-            keras.metrics.Recall(name='recall', thresholds=self.confidence),
-            keras.metrics.AUC(name='auc'),
-            keras.metrics.AUC(name='prc', curve='PR')
+            keras.metrics.FalseNegatives(name="fn"),
+            keras.metrics.FalsePositives(name="fp"),
+            keras.metrics.TrueNegatives(name="tn"),
+            keras.metrics.TruePositives(name="tp"),
+            keras.metrics.Precision(name="precision"),
+            keras.metrics.Recall(name="recall"),
         ]
 
         self.loss = [
@@ -102,10 +105,10 @@ class ScreeningFactorNetwork:
 
         self.callbacks = [
             keras.callbacks.EarlyStopping(
-                monitor='val_prc',
+                monitor='fn',
                 verbose=1,
-                patience=10,
-                mode='max',
+                patience=25,
+                mode='min',
                 restore_best_weights=True
             )
         ]
@@ -114,7 +117,7 @@ class ScreeningFactorNetwork:
         """Compiles the model."""
 
         self.model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+            optimizer=keras.optimizers.Adam(learning_rate=1e-4),
             loss=self.loss,
             metrics=self.metrics
         )
@@ -132,7 +135,7 @@ class ScreeningFactorNetwork:
             x=x["train"],
             y=y["train"],
             batch_size=2048,
-            epochs=100,
+            epochs=500,
             verbose=verbose,
             callbacks=self.callbacks,
             validation_data=(x["validate"], y["validate"]),
