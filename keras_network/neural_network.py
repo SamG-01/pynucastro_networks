@@ -36,7 +36,7 @@ def _predict(
         scn_fac.z2, scn_fac.z2
     ]).reshape(1, 9)
 
-    return bool(1 * network.model.predict(x, verbose=0).item())
+    return not bool(network.model.predict(x, verbose=0).item())
 
 class ScreeningFactorNetwork:
     """Contains a `keras` neural network trained to identify the importance
@@ -49,7 +49,7 @@ class ScreeningFactorNetwork:
         """Defines the model's layers.
     
         Keyword arguments:
-            `data`: the `ScreeningFactorData` object containing the training and testing data
+            `data`: the `ScreeningFactorData` object containing the training, validation, and testing data
             `seed`: used to seed `keras` random number generation
         """
 
@@ -63,7 +63,7 @@ class ScreeningFactorNetwork:
         pos = self.data.frac_pos
         neg = 1 - pos
 
-        self.class_weight = {0: 0.5/neg, 1: 0.5/pos}
+        self.class_weight = {0: 5*0.5/neg, 1: 0.5/pos}
         #self.initial_bias = np.log(pos/neg)
         #self.initial_bias = keras.initializers.Constant(self.initial_bias)
 
@@ -91,12 +91,13 @@ class ScreeningFactorNetwork:
         )
 
         self.metrics = [
-            keras.metrics.FalseNegatives(name="fn"),
             keras.metrics.FalsePositives(name="fp"),
-            keras.metrics.TrueNegatives(name="tn"),
+            keras.metrics.FalseNegatives(name="fn"),
             keras.metrics.TruePositives(name="tp"),
+            keras.metrics.TrueNegatives(name="tn"),
             keras.metrics.Precision(name="precision"),
             keras.metrics.Recall(name="recall"),
+            keras.metrics.AUC(name="auc")
         ]
 
         self.loss = [
@@ -105,7 +106,7 @@ class ScreeningFactorNetwork:
 
         self.callbacks = [
             keras.callbacks.EarlyStopping(
-                monitor='fn',
+                monitor='fp',
                 verbose=1,
                 patience=25,
                 mode='min',
@@ -113,16 +114,16 @@ class ScreeningFactorNetwork:
             )
         ]
 
-    def compile(self) -> None:
+    def compile(self, learning_rate: float = 5e-4) -> None:
         """Compiles the model."""
 
         self.model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=1e-4),
+            optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
             loss=self.loss,
             metrics=self.metrics
         )
 
-    def fit_model(self, verbose=0) -> keras.callbacks.History:
+    def fit_model(self, verbose: int = 0) -> keras.callbacks.History:
         """Fits the model to the data and computes its score.
         
         Keyword arguments:

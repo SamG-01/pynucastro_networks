@@ -93,11 +93,11 @@ class ScreeningFactorData:
 
     @staticmethod
     def screening_indicator(factors: ArrayLike, threshold: float) -> ArrayLike:
-        """Indicator function for whether a screening factor is important.
+        """Indicator function for whether a screening factor can be skipped.
         
         Keyword arguments:
             factors: the screening factors to check.
             threshold: the threshold over which the screening factors are relevant.
         """
 
-        return (factors > threshold).astype(int)
+        return (factors <= threshold).astype(int)
