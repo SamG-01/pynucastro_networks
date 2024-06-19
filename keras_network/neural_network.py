@@ -15,7 +15,7 @@ def _predict(
         comp: pyna.Composition,
         nuclei: tuple[pyna.Nucleus, pyna.Nucleus]
     ) -> bool:
-    """Returns a model's prediction for how important screening is for a given temperature, density, and Composition.
+    """Returns a model's prediction for whether screening can be skipped for a given temperature, density, and Composition.
 
     Keyword arguments:
         `network`: the `ScreeningFactorNetwork` to perform the prediction for.
@@ -36,7 +36,7 @@ def _predict(
         scn_fac.z2, scn_fac.z2
     ]).reshape(1, 9)
 
-    return not bool(network.model.predict(x, verbose=0).item())
+    return bool(network.model.predict(x, verbose=0).item())
 
 class ScreeningFactorNetwork:
     """Contains a `keras` neural network trained to identify the importance
